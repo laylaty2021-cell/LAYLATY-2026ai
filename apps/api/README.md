@@ -11,11 +11,11 @@ NestJS modular-monolith backend for the Laylaty platform. See
 - [`docs/api/openapi.yaml`](../../docs/api/openapi.yaml) — the REST contract
   this API implements, endpoint by endpoint.
 - [`docs/backlog/sprint-backlog.md`](../../docs/backlog/sprint-backlog.md) —
-  what's implemented vs. still a boundary placeholder. As of this scaffold,
-  `modules/auth` and `modules/users` are real (Sprint 1); every other
-  `modules/*` is an empty `@Module({})` with a comment pointing at the
-  sprint that implements it, so `AppModule`'s import graph already matches
-  the target module boundary.
+  every module listed there (auth, organizations, stores, catalog,
+  inventory, events, bookings, carts/orders, payments, shipping,
+  notifications, reviews, admin) is implemented in `src/modules/*`, wired
+  end to end, and covered by the e2e suite below — this is a working MVP
+  backend, not a scaffold of stubs.
 
 ## Local development
 
@@ -24,10 +24,16 @@ cp .env.example .env
 docker compose -f ../../infrastructure/docker-compose.yml up -d postgres redis
 npm install
 npx prisma migrate deploy
+npx prisma db seed   # wedding task templates, categories, admin roles — see prisma/seed.ts
 npm run start:dev
 ```
 
 API listens on `http://localhost:3000/v1`. Health check: `GET /v1/health`.
+
+Without the seed step, the app still runs correctly — it just means no
+`event_task_templates` exist yet, so creating a `wedding` event won't
+auto-populate its task timeline (blueprint §17), and there are no seeded
+categories or admin roles to assign.
 
 ## Tests
 
@@ -35,6 +41,14 @@ API listens on `http://localhost:3000/v1`. Health check: `GET /v1/health`.
 npm test              # unit tests (mocked Prisma/Jwt — no DB needed)
 npm run test:e2e       # end-to-end (needs DATABASE_URL pointing at a real Postgres)
 ```
+
+`test/auth.e2e-spec.ts` covers the Sprint 1 auth flow in isolation.
+`test/full-flow.e2e-spec.ts` walks a realistic cross-module scenario:
+merchant onboarding (org → store → service → booking resource) → a
+customer planning an event → booking-slot discovery with a concurrent
+double-hold correctly rejected (`409`, enforced by the database, not
+application code) → cart checkout → idempotent payment creation →
+idempotent webhook settlement → the order landing in `paid`.
 
 ## Known follow-up: dependency pins
 

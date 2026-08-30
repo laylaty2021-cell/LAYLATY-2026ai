@@ -17,7 +17,11 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json --forceExit"
+    "test:e2e": "jest --config ./test/jest-e2e.json --forceExit",
+    "db:seed": "ts-node prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   },
   "dependencies": {
     "@nestjs/bullmq": "^10.2.3",
@@ -30,6 +34,7 @@
     "@nestjs/schedule": "^4.1.2",
     "@nestjs/swagger": "^7.4.2",
     "@nestjs/throttler": "^5.2.0",
+    "@prisma/client": "^6.19.3",
     "@types/bcrypt": "^6.0.0",
     "@types/passport-jwt": "^4.0.1",
     "bcrypt": "^6.0.0",
@@ -46,7 +51,6 @@
     "@nestjs/cli": "^10.0.0",
     "@nestjs/schematics": "^10.0.0",
     "@nestjs/testing": "^10.0.0",
-    "@prisma/client": "^6.19.3",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.2",
     "@types/node": "^20.3.1",
