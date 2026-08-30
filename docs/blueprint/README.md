@@ -64,9 +64,13 @@ Commerce  Booking    POS     Accounting     CRM
 
 ## الملفات التنفيذية المرافقة
 
-- [`db/schema.sql`](../../db/schema.sql) — سكربت PostgreSQL كامل قابل للتنفيذ ينشئ كل الـ Schemas والجداول الأساسية.
+- [`db/schema.sql`](../../db/schema.sql) — سكربت PostgreSQL كامل قابل للتنفيذ ينشئ كل الـ Schemas والجداول الأساسية (يتضمن قيد `EXCLUDE` لمنع الحجز المزدوج، مُختبَر فعليًا).
 - [`db/rls_policies.sql`](../../db/rls_policies.sql) — سياسات RLS الفعلية لكل جدول تشغيلي.
+- [`db/roles.sql`](../../db/roles.sql) — أدوار قاعدة البيانات: `laylaty_app` (مقيَّد بـ RLS، يستخدمه الـ API لكل طلب) و`laylaty_service` (BYPASSRLS، لعمليات التهيئة الموثوقة فقط — راجع [15-multi-tenant-security.md](./15-multi-tenant-security.md) القسم 2).
+- [`db/seed_permissions.sql`](../../db/seed_permissions.sql) — كتالوج الصلاحيات العام المطابق لمصفوفة [04](./04-roles-permissions-matrix.md).
+- [`db/auth_uid_selfhosted.sql`](../../db/auth_uid_selfhosted.sql) — بديل `auth.uid()` عند النشر بدون Supabase.
 - [`api/openapi.yaml`](../../api/openapi.yaml) — مواصفة OpenAPI 3.0 لأهم الموارد (Stores, Products, Orders, Bookings, Payments, Customers, Webhooks).
+- **[`services/api`](../../services/api)** — أول شريحة MVP عاملة فعليًا فوق هذه الملفات (وليست توثيقًا فقط): Identity & Access، Stores، Catalog، Booking، Orders، Payments — مع 10 اختبارات تكامل حقيقية ضد Postgres فعلي تثبت أن RLS والـ Idempotency ومنع الحجز المزدوج تعمل كما هو موصوف أعلاه.
 
 ## مبادئ حاكمة (تنطبق على كل مستند لاحق)
 

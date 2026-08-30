@@ -6,6 +6,7 @@
 -- =====================================================================
 
 create extension if not exists "pgcrypto"; -- for gen_random_uuid()
+create extension if not exists "btree_gist"; -- for the booking_items exclusion constraint below
 
 create schema if not exists auth;
 create schema if not exists platform;
@@ -362,11 +363,15 @@ create table if not exists booking.booking_items (
     booking_id uuid not null references booking.bookings(id) on delete cascade,
     resource_id uuid not null references booking.resources(id),
     quantity numeric not null default 1,
-    price numeric(14,2) not null default 0
+    price numeric(14,2) not null default 0,
+    -- Set to null (by the application) when the owning booking is
+    -- CANCELLED/EXPIRED, so the exclusion constraint below only ever
+    -- considers time ranges that are still actually held.
+    time_range tstzrange,
+    constraint booking_items_no_overlap
+        exclude using gist (resource_id with =, time_range with &&)
+        where (time_range is not null)
 );
-
--- prevent double-booking of the same resource for overlapping time ranges
-alter table booking.booking_items add column if not exists time_range tstzrange;
 
 -- =====================================================================
 -- pos
