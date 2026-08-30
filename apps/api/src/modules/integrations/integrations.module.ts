@@ -1,11 +1,19 @@
 import { Module } from '@nestjs/common';
+import { PAYMENT_PROVIDER } from './payments/payment-provider.interface';
+import { MockPaymentProvider } from './payments/mock-payment.provider';
+import { SHIPPING_PROVIDER } from './shipping/shipping-provider.interface';
+import { MockShippingProvider } from './shipping/mock-shipping.provider';
 
 // Home for the Payment Provider and Shipping Provider abstraction
-// interfaces (blueprint §12/§13: createPayment/verifyPayment/refundPayment,
-// getRates/createShipment/trackShipment) and their concrete adapters
-// (Moyasar/HyperPay/Tap, a shipping carrier, ...). Payments and Shipping
-// modules depend on the interfaces exported here, never on a concrete
-// provider directly — this is what keeps a provider swap a one-adapter
-// change (blueprint §46, rule 6).
-@Module({})
+// interfaces (blueprint §12/§13) and their concrete adapters. Payments and
+// Shipping modules inject PAYMENT_PROVIDER / SHIPPING_PROVIDER — never a
+// concrete class — so swapping providers means changing this module's
+// `useClass` binding only.
+@Module({
+  providers: [
+    { provide: PAYMENT_PROVIDER, useClass: MockPaymentProvider },
+    { provide: SHIPPING_PROVIDER, useClass: MockShippingProvider },
+  ],
+  exports: [PAYMENT_PROVIDER, SHIPPING_PROVIDER],
+})
 export class IntegrationsModule {}

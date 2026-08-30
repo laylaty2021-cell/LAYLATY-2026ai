@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ScheduleModule } from '@nestjs/schedule';
 import { APP_GUARD } from '@nestjs/core';
 import configuration from './config/configuration';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { AccessModule } from './common/access/access.module';
 import { HealthController } from './common/health/health.controller';
 import { AuthModule } from './modules/auth/auth.module';
 import { UsersModule } from './modules/users/users.module';
@@ -19,6 +21,8 @@ import { ShippingModule } from './modules/shipping/shipping.module';
 import { InventoryModule } from './modules/inventory/inventory.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { IntegrationsModule } from './modules/integrations/integrations.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 // Module boundary mirrors docs/database/schema.sql section-by-section and
 // docs/backlog/sprint-backlog.md's Epic Map — this is the "Modular
@@ -29,7 +33,9 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, load: [configuration] }),
     ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+    ScheduleModule.forRoot(),
     PrismaModule,
+    AccessModule,
     AuthModule,
     UsersModule,
     OrganizationsModule,
@@ -44,6 +50,8 @@ import { IntegrationsModule } from './modules/integrations/integrations.module';
     InventoryModule,
     NotificationsModule,
     IntegrationsModule,
+    ReviewsModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
