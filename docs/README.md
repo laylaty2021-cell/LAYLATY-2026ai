@@ -12,8 +12,9 @@ engineering artifacts.
 | [`mobile/flutter-architecture.md`](mobile/flutter-architecture.md) | Customer app structure (Feature-Based, Riverpod), matching the OpenAPI contract feature-by-feature. |
 | [`../apps/api`](../apps/api) | The NestJS backend — every module from the schema is implemented (auth, organizations, stores, catalog, inventory, events, bookings, carts/orders, payments, shipping, notifications, reviews, admin), not just scaffolded. 7 e2e + 3 unit tests pass against a live Postgres. |
 | [`../apps/customer`](../apps/customer) | The Flutter customer app. `auth` and `events` (the Event Dashboard — the platform's differentiator screen) are real, working code wired to `apps/api`; other features are scaffolded per the architecture doc, not yet implemented. |
+| [`../apps/merchant`](../apps/merchant) | The Next.js merchant dashboard. `auth` (register/OTP/login) and the onboarding dashboard (create organization → create store → list them, via `GET /organizations` and `GET /merchant/stores`) are real, working code wired to `apps/api`; catalog/bookings/order management screens are not yet built. |
 | [`../infrastructure/docker-compose.yml`](../infrastructure/docker-compose.yml) | Postgres + Redis + API + worker, one command for local dev. |
-| [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) | CI: validates `schema.sql` against real Postgres, lints the OpenAPI spec, and runs the API's lint/build/unit/e2e suite. |
+| [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) | CI: validates `schema.sql` against real Postgres, lints the OpenAPI spec, runs the API's lint/build/unit/e2e suite, the Flutter app's analyze/test, and the merchant app's lint/build. |
 
 ## How these fit together
 
@@ -24,9 +25,8 @@ engineering artifacts.
    isolation, unified commerce polymorphism, booking concurrency safety,
    payment idempotency).
 3. `openapi.yaml` is the contract between `apps/api` and both frontends
-   (Flutter customer app, Next.js merchant/admin panels — the latter not
-   yet built) — every endpoint in the sprint backlog has a matching path
-   here.
+   (Flutter customer app, Next.js merchant dashboard) — every endpoint in
+   the sprint backlog has a matching path here.
 4. `sprint-backlog.md` sequences the work needed to build against that
    schema and contract, sprint by sprint, with explicit exit criteria.
 5. `apps/api` implements that contract end to end: every module owns its
@@ -43,8 +43,12 @@ engineering artifacts.
 
 ## Known gaps (not yet built)
 
-- **Next.js merchant/admin dashboards** — `docs/api/openapi.yaml` covers
-  their endpoints (`/merchant/*`, `/admin/*`), but no frontend exists yet.
+- **Admin dashboard** — `docs/api/openapi.yaml` covers the `/admin/*`
+  endpoints, but no frontend exists yet (the merchant onboarding dashboard
+  under `apps/merchant` is built; an admin-facing panel is not).
+- **Merchant dashboard beyond onboarding** — catalog, bookings, and order
+  management screens aren't built yet in `apps/merchant` (auth and the
+  organization/store onboarding flow are real).
 - **Flutter features beyond auth/events** — stores, catalog, bookings,
   cart, orders, notifications, profile (see the `NOTE.md` in each
   `apps/customer/lib/features/*` folder).
@@ -70,4 +74,7 @@ npx prisma migrate deploy && npx prisma db seed && npm run build && npm test
 
 # The Flutter app
 cd apps/customer && flutter pub get && flutter analyze && flutter test
+
+# The merchant dashboard
+cd apps/merchant && npm install && npm run lint && npm run build
 ```
