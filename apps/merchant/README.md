@@ -14,6 +14,10 @@ the Laylaty platform. Consumes `apps/api`'s REST contract directly — see
   `GET /merchant/stores`; shows an empty-state "create your organization"
   form when the merchant has none, then a "create your store" form once an
   organization exists, then lists the merchant's organizations and stores.
+- Store detail (`src/app/dashboard/stores/[storeId]`): fetches
+  `GET /merchant/stores/:storeId/products` and `.../services`, lists them,
+  and has forms to add a product (`POST .../products`) or service
+  (`POST .../services`).
 
 This app is deliberately a fully client-rendered SPA — every page is
 `"use client"`, auth lives in `localStorage`, no server components or
@@ -23,7 +27,7 @@ for why this is a supported first-class pattern in this Next.js version.
 
 ## Not yet implemented
 
-Catalog, bookings, and order management screens — see
+Packages, bookings, and order management screens — see
 `../../docs/backlog/sprint-backlog.md` for what's next.
 
 ## Local development

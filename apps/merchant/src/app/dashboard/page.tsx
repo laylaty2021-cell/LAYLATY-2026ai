@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/auth-context";
 import { apiFetch, ApiError } from "@/lib/api-client";
@@ -127,17 +128,19 @@ export default function DashboardPage() {
             ) : (
               <ul className="space-y-2">
                 {stores.map((store) => (
-                  <li
-                    key={store.id}
-                    className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3"
-                  >
-                    <div>
-                      <p className="font-medium text-zinc-900">{store.name}</p>
-                      <p className="text-sm text-zinc-500">
-                        {store.businessType.replace("_", " ")} · /{store.slug}
-                      </p>
-                    </div>
-                    <StatusBadge status={store.status} />
+                  <li key={store.id}>
+                    <Link
+                      href={`/dashboard/stores/${store.id}`}
+                      className="flex items-center justify-between rounded-lg border border-zinc-200 bg-white px-4 py-3 hover:border-zinc-300"
+                    >
+                      <div>
+                        <p className="font-medium text-zinc-900">{store.name}</p>
+                        <p className="text-sm text-zinc-500">
+                          {store.businessType.replace("_", " ")} · /{store.slug}
+                        </p>
+                      </div>
+                      <StatusBadge status={store.status} />
+                    </Link>
                   </li>
                 ))}
               </ul>

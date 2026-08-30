@@ -12,7 +12,7 @@ engineering artifacts.
 | [`mobile/flutter-architecture.md`](mobile/flutter-architecture.md) | Customer app structure (Feature-Based, Riverpod), matching the OpenAPI contract feature-by-feature. |
 | [`../apps/api`](../apps/api) | The NestJS backend — every module from the schema is implemented (auth, organizations, stores, catalog, inventory, events, bookings, carts/orders, payments, shipping, notifications, reviews, admin), not just scaffolded. 7 e2e + 3 unit tests pass against a live Postgres. |
 | [`../apps/customer`](../apps/customer) | The Flutter customer app. `auth` and `events` (the Event Dashboard — the platform's differentiator screen) are real, working code wired to `apps/api`; other features are scaffolded per the architecture doc, not yet implemented. |
-| [`../apps/merchant`](../apps/merchant) | The Next.js merchant dashboard. `auth` (register/OTP/login) and the onboarding dashboard (create organization → create store → list them, via `GET /organizations` and `GET /merchant/stores`) are real, working code wired to `apps/api`; catalog/bookings/order management screens are not yet built. |
+| [`../apps/merchant`](../apps/merchant) | The Next.js merchant dashboard. `auth` (register/OTP/login), the onboarding dashboard (create organization → create store → list them), and per-store catalog management (list/add products and services) are real, working code wired to `apps/api`; packages/bookings/order management screens are not yet built. |
 | [`../infrastructure/docker-compose.yml`](../infrastructure/docker-compose.yml) | Postgres + Redis + API + worker, one command for local dev. |
 | [`../.github/workflows/ci.yml`](../.github/workflows/ci.yml) | CI: validates `schema.sql` against real Postgres, lints the OpenAPI spec, runs the API's lint/build/unit/e2e suite, the Flutter app's analyze/test, and the merchant app's lint/build. |
 
@@ -46,9 +46,10 @@ engineering artifacts.
 - **Admin dashboard** — `docs/api/openapi.yaml` covers the `/admin/*`
   endpoints, but no frontend exists yet (the merchant onboarding dashboard
   under `apps/merchant` is built; an admin-facing panel is not).
-- **Merchant dashboard beyond onboarding** — catalog, bookings, and order
-  management screens aren't built yet in `apps/merchant` (auth and the
-  organization/store onboarding flow are real).
+- **Merchant dashboard beyond onboarding + basic catalog** — packages,
+  bookings, and order management screens aren't built yet in
+  `apps/merchant` (auth, the organization/store onboarding flow, and
+  product/service catalog management are real).
 - **Flutter features beyond auth/events** — stores, catalog, bookings,
   cart, orders, notifications, profile (see the `NOTE.md` in each
   `apps/customer/lib/features/*` folder).
