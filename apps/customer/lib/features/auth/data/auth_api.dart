@@ -17,8 +17,8 @@ class AuthApi {
     required String password,
   }) => _post('/auth/register', {
     'fullName': fullName,
-    if (email != null) 'email': email,
-    if (phone != null) 'phone': phone,
+    'email': ?email,
+    'phone': ?phone,
     'password': password,
   });
 

@@ -33,8 +33,8 @@ class EventsApi {
           'name': name,
           'eventType': eventType,
           'eventDate': eventDate.toIso8601String().split('T').first,
-          if (city != null) 'city': city,
-          if (budgetTotal != null) 'budgetTotal': budgetTotal,
+          'city': ?city,
+          'budgetTotal': ?budgetTotal,
         },
       );
       return LaylatyEvent.fromJson(response.data as Map<String, dynamic>);
