@@ -4,6 +4,7 @@ import { authenticate } from "../../middleware/authenticate.js";
 import { withUserContext, requirePermission } from "../../db.js";
 import { ApiError } from "../../errors.js";
 import { MockPaymentProvider } from "./provider.js";
+import { consumeReservationsForOrder } from "../inventory/service.js";
 
 const createPaymentSchema = z.object({
   order_id: z.string().uuid(),
@@ -110,6 +111,7 @@ export async function paymentRoutes(app: FastifyInstance): Promise<void> {
         await client.query("update sales.orders set status = 'PAID', updated_at = now() where id = $1", [
           body.order_id,
         ]);
+        await consumeReservationsForOrder(client, body.order_id);
       }
 
       return { payment: updated.rows[0], isNew: true };

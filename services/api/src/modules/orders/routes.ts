@@ -3,6 +3,7 @@ import { z } from "zod";
 import { authenticate } from "../../middleware/authenticate.js";
 import { withUserContext, requirePermission } from "../../db.js";
 import { notFound } from "../../errors.js";
+import { reserveStockForOrder, releaseReservationsForOrder } from "../inventory/service.js";
 
 const orderItemSchema = z.object({
   item_type: z.enum(["variant", "service", "package"]),
@@ -44,6 +45,11 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
           [order.id, item.item_type, item.item_id, item.quantity, item.unit_price, item.unit_price * item.quantity],
         );
       }
+
+      // Reserving stock inside the same transaction as the order/items
+      // insert means insufficient stock rolls the whole order back — no
+      // order is ever left referencing a reservation that failed.
+      await reserveStockForOrder(client, storeId, order.id, body.items);
 
       return order;
     });
@@ -106,7 +112,11 @@ export async function orderRoutes(app: FastifyInstance): Promise<void> {
          returning id, store_id, status`,
         [orderId, storeId],
       );
-      return result.rows[0];
+      const order = result.rows[0];
+      if (order) {
+        await releaseReservationsForOrder(client, orderId);
+      }
+      return order;
     });
 
     if (!order) throw notFound("order");

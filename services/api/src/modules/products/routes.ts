@@ -2,12 +2,17 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { authenticate } from "../../middleware/authenticate.js";
 import { withUserContext, requirePermission } from "../../db.js";
-import { fromPgError } from "../../errors.js";
+import { fromPgError, notFound } from "../../errors.js";
 
 const createProductSchema = z.object({
   type: z.enum(["product", "service", "package"]),
   name: z.string().min(1),
   category_id: z.string().uuid().optional(),
+});
+
+const createVariantSchema = z.object({
+  sku: z.string().optional(),
+  attributes: z.record(z.unknown()).default({}),
 });
 
 function slugify(name: string): string {
@@ -60,4 +65,37 @@ export async function productRoutes(app: FastifyInstance): Promise<void> {
 
     reply.send({ data: products });
   });
+
+  // catalog.variants is what inventory.stock and order_items actually
+  // reference (a `product` may have several sellable variants — size,
+  // color, ...). Not in api/openapi.yaml yet; added here as a natural
+  // extension while wiring up the inventory module.
+  app.post(
+    "/v1/stores/:store_id/products/:product_id/variants",
+    { preHandler: authenticate },
+    async (req, reply) => {
+      const { store_id: storeId, product_id: productId } = req.params as { store_id: string; product_id: string };
+      const body = createVariantSchema.parse(req.body);
+
+      const variant = await withUserContext(req.userId, async (client) => {
+        await requirePermission(client, storeId, "catalog.write");
+
+        const product = await client.query("select id from catalog.products where id = $1 and store_id = $2", [
+          productId,
+          storeId,
+        ]);
+        if (product.rowCount === 0) throw notFound("product");
+
+        const result = await client.query(
+          `insert into catalog.variants (product_id, sku, attributes, status)
+           values ($1, $2, $3::jsonb, 'active')
+           returning id, product_id, sku, attributes, status`,
+          [productId, body.sku ?? null, JSON.stringify(body.attributes)],
+        );
+        return result.rows[0];
+      });
+
+      reply.code(201).send(variant);
+    },
+  );
 }

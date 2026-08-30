@@ -66,6 +66,12 @@ not just documented:
   rejected with `409` by the database-level exclusion constraint (not
   merely application logic), and cancelling a booking frees the slot for
   reuse.
+- **`inventory.test.ts`** — creating an order reserves stock
+  (`available_to_sell = available_qty - reserved_qty`, per
+  [`docs/blueprint/12-inventory-engine.md`](../../docs/blueprint/12-inventory-engine.md)),
+  over-selling is rejected with `409 INSUFFICIENT_STOCK`, a captured
+  payment consumes the reservation (decrements `available_qty`), and
+  cancelling an order releases it back.
 
 Requires passwordless `sudo -u postgres` locally (already the case in this
 repo's dev containers) since the test helper shells out to `psql`/`createdb`
@@ -74,8 +80,10 @@ to reset state between runs.
 ## What's deliberately out of scope here
 
 Per [`docs/blueprint/20-roadmap-mvp-v1-v2.md`](../../docs/blueprint/20-roadmap-mvp-v1-v2.md),
-this slice does not yet include: multi-branch scoping, multi-warehouse
-inventory, POS offline/sync, a real payment gateway (see
+this slice does not yet include: multi-branch scoping, splitting one order
+line's reservation across multiple warehouses (a variant's stock is
+expected to live in one warehouse per store for this MVP slice), POS
+offline/sync, a real payment gateway (see
 [`src/modules/payments/provider.ts`](./src/modules/payments/provider.ts) —
 `MockPaymentProvider` implements the `PaymentProviderAdapter` interface from
 [`docs/blueprint/08-payment-adapter.md`](../../docs/blueprint/08-payment-adapter.md)

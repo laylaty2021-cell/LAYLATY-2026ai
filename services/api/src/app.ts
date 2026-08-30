@@ -8,6 +8,7 @@ import { customerRoutes } from "./modules/customers/routes.js";
 import { bookingRoutes } from "./modules/bookings/routes.js";
 import { orderRoutes } from "./modules/orders/routes.js";
 import { paymentRoutes } from "./modules/payments/routes.js";
+import { inventoryRoutes } from "./modules/inventory/routes.js";
 
 export function buildApp(): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -21,6 +22,7 @@ export function buildApp(): FastifyInstance {
   app.register(bookingRoutes);
   app.register(orderRoutes);
   app.register(paymentRoutes);
+  app.register(inventoryRoutes);
 
   // Standard error envelope from docs/blueprint/05-rest-api.md, section 1.
   app.setErrorHandler((err, _req, reply) => {
