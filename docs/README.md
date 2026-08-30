@@ -36,6 +36,10 @@ engineering artifacts.
 6. `apps/customer` consumes that contract from the client side — its
    `auth`/`events` `data/` classes are hand-written directly against
    `openapi.yaml`'s schemas, so the two never drift on a field name.
+7. Admin access is real RBAC, not a `userType` flag: `AdminGuard` checks
+   `admin_user_roles`/`admin_role_permissions`, and nothing reachable over
+   the API can grant a user that role — the only bootstrap path is
+   `ADMIN_SEED_EMAIL` on `npx prisma db seed` (see `apps/api/.env.example`).
 
 ## Known gaps (not yet built)
 
@@ -47,9 +51,6 @@ engineering artifacts.
 - **Real payment/shipping providers** — `apps/api` ships a swappable
   provider interface with a mock implementation; no live Moyasar/HyperPay/
   Tap or carrier integration yet.
-- **Fine-grained admin RBAC** — `admin_roles`/`admin_permissions` tables
-  and seed data exist, but the current `AdminGuard` only checks
-  `userType === 'admin'`, not per-permission.
 - **Image upload, real deployment target, advanced search/observability**
   — explicitly deferred per the blueprint's own postponement list.
 
