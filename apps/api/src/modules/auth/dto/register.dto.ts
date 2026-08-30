@@ -1,12 +1,19 @@
 import { UserType } from '@prisma/client';
 import {
   IsEmail,
-  IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   MinLength,
   ValidateIf,
 } from 'class-validator';
+
+// 'admin' is deliberately excluded from self-registration — admin access
+// is granted out-of-band via admin_user_roles (see prisma/seed.ts and
+// AdminGuard), never chosen by the registering client. Accepting an
+// arbitrary UserType here would let anyone self-escalate by POSTing
+// {"userType": "admin"}.
+const SELF_REGISTERABLE_USER_TYPES: UserType[] = ['customer', 'merchant'];
 
 export class RegisterDto {
   @IsString()
@@ -24,6 +31,6 @@ export class RegisterDto {
   password: string;
 
   @IsOptional()
-  @IsEnum(UserType)
+  @IsIn(SELF_REGISTERABLE_USER_TYPES)
   userType?: UserType;
 }

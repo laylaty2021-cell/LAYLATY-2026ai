@@ -84,6 +84,28 @@ async function main() {
       .map((p) => ({ roleId: supportRole.id, permissionId: p.id })),
   });
   console.log('Seeded admin roles/permissions (super_admin, support)');
+
+  // Bootstrap problem: nothing can grant the first admin_user_roles row
+  // through the API (by design — see RegisterDto), so the operator does it
+  // once here. Set ADMIN_SEED_EMAIL to an already-registered user's email
+  // to grant them super_admin; no-ops if unset or the user doesn't exist
+  // yet (register the account first, then re-run the seed).
+  const bootstrapAdminEmail = process.env.ADMIN_SEED_EMAIL;
+  if (bootstrapAdminEmail) {
+    const user = await prisma.user.findUnique({ where: { email: bootstrapAdminEmail } });
+    if (user) {
+      await prisma.adminUserRole.upsert({
+        where: { userId_roleId: { userId: user.id, roleId: superAdminRole.id } },
+        create: { userId: user.id, roleId: superAdminRole.id },
+        update: {},
+      });
+      console.log(`Granted super_admin to ${bootstrapAdminEmail}`);
+    } else {
+      console.warn(
+        `ADMIN_SEED_EMAIL=${bootstrapAdminEmail} but no such user exists yet — register the account, then re-run the seed`,
+      );
+    }
+  }
 }
 
 main()
