@@ -211,6 +211,17 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Organization' }
+    get:
+      tags: [Organizations]
+      summary: List every organization the caller belongs to (merchant dashboard landing query)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Organization' }
 
   /organizations/{organizationId}/members:
     parameters:
@@ -276,6 +287,19 @@ paths:
         - name: page
           in: query
           schema: { type: integer, default: 1 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Store' }
+
+  /merchant/stores:
+    get:
+      tags: [Stores]
+      summary: List every store across every organization the caller belongs to, any status (merchant dashboard landing query)
       responses:
         '200':
           description: OK
@@ -1011,8 +1035,12 @@ components:
 
     StoreInput:
       type: object
-      required: [name, slug, business_type]
+      required: [organization_id, name, slug, business_type]
       properties:
+        organization_id:
+          type: string
+          format: uuid
+          description: Must be an organization the caller belongs to (owner/manager) — verified server-side, not trusted as-is.
         name: { type: string }
         slug: { type: string }
         business_type:

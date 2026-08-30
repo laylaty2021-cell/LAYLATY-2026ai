@@ -35,6 +35,16 @@ export class OrganizationsService {
     });
   }
 
+  // The merchant dashboard's landing query: every org this user belongs
+  // to, regardless of role — a merchant app needs this before it can ask
+  // "which store do you want to manage" or offer to create one.
+  listMine(userId: string) {
+    return this.prisma.organization.findMany({
+      where: { members: { some: { userId } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   async listMembers(userId: string, organizationId: string) {
     await this.access.assertOrganizationAccess(userId, organizationId);
     return this.prisma.organizationMember.findMany({

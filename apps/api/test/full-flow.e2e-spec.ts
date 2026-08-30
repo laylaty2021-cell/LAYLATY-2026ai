@@ -92,6 +92,24 @@ describe('Full platform flow (e2e)', () => {
     storeId = storeRes.body.id;
     expect(storeRes.body.status).toBe('pending_review');
 
+    // Merchant dashboard landing queries: "my orgs" and "my stores" must
+    // surface this org/store even though the store isn't public yet.
+    const myOrgsRes = await request(app.getHttpServer())
+      .get('/v1/organizations')
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .expect(200);
+    expect(myOrgsRes.body.map((o: { id: string }) => o.id)).toContain(
+      organizationId,
+    );
+
+    const myStoresRes = await request(app.getHttpServer())
+      .get('/v1/merchant/stores')
+      .set('Authorization', `Bearer ${merchantToken}`)
+      .expect(200);
+    expect(myStoresRes.body.map((s: { id: string }) => s.id)).toContain(
+      storeId,
+    );
+
     // Default Business Template modules for a photographer (blueprint §9).
     const modulesRes = await request(app.getHttpServer())
       .get(`/v1/merchant/stores/${storeId}/modules`)

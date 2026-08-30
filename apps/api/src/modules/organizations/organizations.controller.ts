@@ -19,6 +19,11 @@ export class OrganizationsController {
     return this.organizationsService.create(user.id, dto);
   }
 
+  @Get()
+  listMine(@CurrentUser() user: AuthenticatedUser) {
+    return this.organizationsService.listMine(user.id);
+  }
+
   @Get(':organizationId/members')
   listMembers(
     @CurrentUser() user: AuthenticatedUser,

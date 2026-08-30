@@ -54,6 +54,17 @@ export class StoresService {
     });
   }
 
+  // Every store across every organization this user belongs to,
+  // regardless of status — unlike search() below (public, active-only),
+  // this backs the merchant dashboard so a store still in
+  // 'pending_review' or 'draft' is visible to the merchant who owns it.
+  listMine(userId: string) {
+    return this.prisma.store.findMany({
+      where: { organization: { members: { some: { userId } } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
   search(dto: SearchStoresDto) {
     const where: Prisma.StoreWhereInput = {
       status: 'active',
