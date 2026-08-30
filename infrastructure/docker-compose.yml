@@ -1,0 +1,78 @@
+name: laylaty
+
+# Local dev / staging composition matching the blueprint's infrastructure
+# diagram (docs — "INTERNET -> CDN -> Load Balancer -> API Containers ->
+# Redis -> PostgreSQL"). The load balancer and CDN are out of scope here;
+# this file gives every developer the same Postgres + Redis + API + worker
+# stack without hand-installing anything locally.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: laylaty
+      POSTGRES_PASSWORD: laylaty
+      POSTGRES_DB: laylaty_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U laylaty"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/main.js"]
+    environment:
+      DATABASE_URL: postgresql://laylaty:laylaty@postgres:5432/laylaty_dev
+      REDIS_URL: redis://redis:6379
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Same image as `api`; runs the BullMQ processors instead of the HTTP
+  # server (blueprint §27 QUEUE ARCHITECTURE — SMS/email/invoice/report/
+  # webhook-retry jobs never run inline with a request).
+  worker:
+    build:
+      context: ../apps/api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/worker.js"]
+    environment:
+      DATABASE_URL: postgresql://laylaty:laylaty@postgres:5432/laylaty_dev
+      REDIS_URL: redis://redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

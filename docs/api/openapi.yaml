@@ -1,0 +1,1361 @@
+openapi: 3.0.3
+info:
+  title: Laylaty Platform API
+  version: 0.1.0-mvp
+  description: >
+    REST API for the Laylaty MVP (see docs/database/schema.sql and
+    docs/backlog/sprint-backlog.md). Every resource here is backed 1:1 by a
+    table in the schema. `organization_id` / `store_id` are never accepted
+    as client input — they are always derived server-side from the
+    authenticated principal's tenant context (blueprint §6).
+servers:
+  - url: https://api.laylaty.com/v1
+    description: Production
+  - url: https://api.staging.laylaty.com/v1
+    description: Staging
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: Auth
+  - name: Users
+  - name: Organizations
+  - name: Stores
+  - name: Catalog
+  - name: Booking
+  - name: Events
+  - name: Cart
+  - name: Orders
+  - name: Payments
+  - name: Shipping
+  - name: Notifications
+  - name: Reviews
+  - name: Admin
+
+paths:
+  # ---------------------------------------------------------------- Auth
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user (customer or merchant)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [full_name, password]
+              properties:
+                full_name: { type: string }
+                email: { type: string, format: email }
+                phone: { type: string }
+                password: { type: string, format: password, minLength: 8 }
+                user_type: { type: string, enum: [customer, merchant] }
+      responses:
+        '201':
+          description: User created, OTP sent for verification
+        '409':
+          description: Email or phone already registered
+
+  /auth/otp/verify:
+    post:
+      tags: [Auth]
+      summary: Verify OTP sent during registration or login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, code, purpose]
+              properties:
+                identifier: { type: string }
+                code: { type: string }
+                purpose: { type: string, enum: [register, login, reset_password] }
+      responses:
+        '200': { description: OTP verified }
+        '400': { description: Invalid or expired OTP }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email/phone + password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, password]
+              properties:
+                identifier: { type: string }
+                password: { type: string, format: password }
+      responses:
+        '200':
+          description: Access + refresh token pair
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { description: Invalid credentials }
+        '429': { description: "Rate limited (Redis-backed, blueprint §23)" }
+
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Exchange a refresh token for a new access token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenPair' }
+        '401': { description: "Refresh token invalid, expired, or revoked" }
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Revoke the current refresh token
+      responses:
+        '204': { description: Logged out }
+
+  # ---------------------------------------------------------------- Users
+  /users/me:
+    get:
+      tags: [Users]
+      summary: Get the authenticated user's profile
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+    patch:
+      tags: [Users]
+      summary: Update the authenticated user's profile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                full_name: { type: string }
+                avatar_url: { type: string }
+                locale: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+
+  /users/me/addresses:
+    get:
+      tags: [Users]
+      summary: List the authenticated user's addresses
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Address' }
+    post:
+      tags: [Users]
+      summary: Add an address
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AddressInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Address' }
+
+  # ---------------------------------------------------------- Organizations
+  /organizations:
+    post:
+      tags: [Organizations]
+      summary: Create an organization (starts merchant onboarding, blueprint §8)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                commercial_registration: { type: string }
+                tax_number: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Organization' }
+
+  /organizations/{organizationId}/members:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+    get:
+      tags: [Organizations]
+      summary: List organization members
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/OrganizationMember' }
+    post:
+      tags: [Organizations]
+      summary: Invite a member (owner/manager only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string, enum: [manager, staff, accountant] }
+      responses:
+        '201': { description: Invitation sent }
+
+  # ----------------------------------------------------------------- Stores
+  /stores:
+    post:
+      tags: [Stores]
+      summary: Create a store under the caller's organization (blueprint §8 step 5)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Store' }
+    get:
+      tags: [Stores]
+      summary: Public store search/listing (blueprint §15)
+      security: []
+      parameters:
+        - name: business_type
+          in: query
+          schema: { type: string }
+        - name: city
+          in: query
+          schema: { type: string }
+        - name: q
+          in: query
+          description: Full-text search term
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Store' }
+
+  /stores/{storeSlug}:
+    get:
+      tags: [Stores]
+      summary: Public store profile by slug
+      security: []
+      parameters:
+        - name: storeSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Store' }
+        '404': { description: Store not found }
+
+  /merchant/stores/{storeId}/modules:
+    parameters:
+      - $ref: '#/components/parameters/StoreId'
+    get:
+      tags: [Stores]
+      summary: List enabled Business Template modules for a store (blueprint §9)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/StoreModule' }
+    patch:
+      tags: [Stores]
+      summary: Enable/disable modules for a store
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/StoreModule' }
+      responses:
+        '200': { description: Updated }
+
+  # ---------------------------------------------------------------- Catalog
+  /merchant/stores/{storeId}/products:
+    parameters:
+      - $ref: '#/components/parameters/StoreId'
+    get:
+      tags: [Catalog]
+      summary: List products for the merchant's store
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Product' }
+    post:
+      tags: [Catalog]
+      summary: Create a product
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Product' }
+
+  /merchant/stores/{storeId}/services:
+    parameters:
+      - $ref: '#/components/parameters/StoreId'
+    get:
+      tags: [Catalog]
+      summary: List services for the merchant's store
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Service' }
+    post:
+      tags: [Catalog]
+      summary: Create a service
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ServiceInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Service' }
+
+  /merchant/stores/{storeId}/packages:
+    parameters:
+      - $ref: '#/components/parameters/StoreId'
+    post:
+      tags: [Catalog]
+      summary: Create a package bundling products/services/booking resources
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PackageInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Package' }
+
+  /catalog/search:
+    get:
+      tags: [Catalog]
+      summary: Public search across products, services, and packages
+      security: []
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string }
+        - name: category_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: city
+          in: query
+          schema: { type: string }
+        - name: min_price
+          in: query
+          schema: { type: number }
+        - name: max_price
+          in: query
+          schema: { type: number }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/SellableItem' }
+
+  # ---------------------------------------------------------------- Booking
+  /merchant/stores/{storeId}/booking-resources:
+    parameters:
+      - $ref: '#/components/parameters/StoreId'
+    get:
+      tags: [Booking]
+      summary: List booking resources for a store
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/BookingResource' }
+    post:
+      tags: [Booking]
+      summary: Create a bookable resource (hall, car, studio ...)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingResourceInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BookingResource' }
+
+  /booking-resources/{resourceId}/availability:
+    parameters:
+      - name: resourceId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Booking]
+      summary: Query free slots for a resource within a date range (blueprint §11, sprint 7)
+      security: []
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AvailabilitySlot' }
+
+  /bookings:
+    post:
+      tags: [Booking]
+      summary: >
+        Create a temporary hold on a resource for a time range. Implemented as
+        a single atomic transaction relying on the DB-level EXCLUDE constraint
+        (docs/database/erd.md §4) — never a separate check-then-insert.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BookingHoldInput' }
+      responses:
+        '201':
+          description: Hold created, expires at `hold_expires_at`
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+        '409':
+          description: Slot no longer available (concurrent hold won the race)
+
+  /bookings/{bookingId}/cancel:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Booking]
+      summary: Cancel a held or confirmed booking
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Booking' }
+
+  # ----------------------------------------------------------------- Events
+  /events:
+    post:
+      tags: [Events]
+      summary: Create an event (blueprint §7 — the platform's central object)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventInput' }
+      responses:
+        '201':
+          description: Event created; task templates auto-instantiated (blueprint §17)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Event' }
+    get:
+      tags: [Events]
+      summary: List the authenticated customer's events
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Event' }
+
+  /events/{eventId}:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Events]
+      summary: Get the full Event Dashboard payload (tasks, budget, bookings, orders)
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventDashboard' }
+
+  /events/{eventId}/tasks:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Events]
+      summary: List tasks for an event
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EventTask' }
+    post:
+      tags: [Events]
+      summary: Add a manual task
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventTaskInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventTask' }
+
+  /events/{eventId}/budget-items:
+    parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Events]
+      summary: List budget line items for an event
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EventBudgetItem' }
+    post:
+      tags: [Events]
+      summary: Add a budget line item
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EventBudgetItemInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EventBudgetItem' }
+
+  # ------------------------------------------------------------------- Cart
+  /cart:
+    get:
+      tags: [Cart]
+      summary: Get (or lazily create) the active cart for a store
+      parameters:
+        - name: store_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+
+  /cart/items:
+    post:
+      tags: [Cart]
+      summary: Add an item to the cart (product variant, service, or booking hold)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CartItemInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Cart' }
+
+  /cart/items/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    delete:
+      tags: [Cart]
+      summary: Remove a cart item (releases any inventory/booking reservation)
+      responses:
+        '204': { description: Removed }
+
+  /cart/checkout:
+    post:
+      tags: [Cart]
+      summary: Convert the cart into an order (blueprint §14, sprint 9)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                shipping_address_id: { type: string, format: uuid }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+
+  # ------------------------------------------------------------------ Orders
+  /orders:
+    get:
+      tags: [Orders]
+      summary: List the authenticated customer's orders
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Order' }
+
+  /orders/{orderId}:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Orders]
+      summary: Get order detail
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Order' }
+
+  /merchant/stores/{storeId}/orders:
+    parameters:
+      - $ref: '#/components/parameters/StoreId'
+    get:
+      tags: [Orders]
+      summary: List orders for the merchant's store
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Order' }
+
+  # ---------------------------------------------------------------- Payments
+  /payments:
+    post:
+      tags: [Payments]
+      summary: >
+        Create a payment intent for an order or booking. `idempotency_key` is
+        client-generated and unique; retried requests with the same key are
+        no-ops (blueprint §12/§28 idempotency rule).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaymentInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Payment' }
+
+  /payments/webhooks/{provider}:
+    parameters:
+      - name: provider
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [Payments]
+      summary: >
+        Provider webhook receiver. Verifies signature, upserts into
+        payment_webhook_events keyed on (provider, event_id) for idempotent
+        processing, then transitions payment/order/booking state. This is the
+        ONLY path that marks a payment succeeded (blueprint §12 "مهم").
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Acknowledged }
+        '400': { description: Invalid signature }
+
+  /admin/refunds:
+    post:
+      tags: [Payments, Admin]
+      summary: Admin-initiated refund (writes an audit_logs entry)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [payment_id, amount, reason]
+              properties:
+                payment_id: { type: string, format: uuid }
+                amount: { type: number }
+                reason: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Refund' }
+
+  # --------------------------------------------------------------- Shipping
+  /orders/{orderId}/shipment:
+    parameters:
+      - name: orderId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Shipping]
+      summary: Get shipment + tracking events for an order
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Shipment' }
+
+  # ----------------------------------------------------------- Notifications
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: List the authenticated user's notifications
+      parameters:
+        - name: unread_only
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  /notifications/{notificationId}/read:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Notifications]
+      summary: Mark a notification as read
+      responses:
+        '200': { description: Marked read }
+
+  # --------------------------------------------------------------- Reviews
+  /stores/{storeId}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/StoreId'
+    get:
+      tags: [Reviews]
+      summary: List reviews for a store
+      security: []
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Review' }
+    post:
+      tags: [Reviews]
+      summary: Leave a review (must have a completed order at this store)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReviewInput' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Review' }
+
+  # ------------------------------------------------------------------ Admin
+  /admin/organizations:
+    get:
+      tags: [Admin]
+      summary: List organizations pending/active (super_admin, support)
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Organization' }
+
+  /admin/organizations/{organizationId}/approve:
+    parameters:
+      - $ref: '#/components/parameters/OrganizationId'
+    post:
+      tags: [Admin]
+      summary: Approve a pending organization (super_admin only)
+      responses:
+        '200': { description: Organization activated }
+
+  /admin/audit-logs:
+    get:
+      tags: [Admin]
+      summary: Query the platform audit trail (blueprint §25)
+      parameters:
+        - name: entity_type
+          in: query
+          schema: { type: string }
+        - name: entity_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AuditLog' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    StoreId:
+      name: storeId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    OrganizationId:
+      name: organizationId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  schemas:
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        expires_in: { type: integer, description: Access token TTL in seconds }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        phone: { type: string }
+        full_name: { type: string }
+        avatar_url: { type: string }
+        user_type: { type: string, enum: [customer, merchant, admin] }
+        status: { type: string, enum: [active, suspended, pending_verification, deleted] }
+
+    AddressInput:
+      type: object
+      required: [city, address_line]
+      properties:
+        label: { type: string }
+        city: { type: string }
+        district: { type: string }
+        address_line: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        is_default: { type: boolean }
+    Address:
+      allOf:
+        - $ref: '#/components/schemas/AddressInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+
+    Organization:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        commercial_registration: { type: string }
+        tax_number: { type: string }
+        status: { type: string, enum: [pending, active, suspended, rejected] }
+
+    OrganizationMember:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        role: { type: string, enum: [owner, manager, staff, accountant] }
+
+    StoreInput:
+      type: object
+      required: [name, slug, business_type]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        business_type:
+          type: string
+          enum: [wedding_hall, florist, photographer, restaurant, beauty, transportation, catering, other]
+        description: { type: string }
+        city: { type: string }
+        logo_url: { type: string }
+        cover_url: { type: string }
+    Store:
+      allOf:
+        - $ref: '#/components/schemas/StoreInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            organization_id: { type: string, format: uuid }
+            status: { type: string, enum: [draft, pending_review, active, suspended, closed] }
+
+    StoreModule:
+      type: object
+      properties:
+        module_key: { type: string, example: booking }
+        enabled: { type: boolean }
+        config: { type: object }
+
+    ProductInput:
+      type: object
+      required: [name, slug, base_price]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        category_id: { type: string, format: uuid }
+        description: { type: string }
+        base_price: { type: number }
+        currency: { type: string, default: SAR }
+        requires_shipping: { type: boolean, default: true }
+    Product:
+      allOf:
+        - $ref: '#/components/schemas/ProductInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            store_id: { type: string, format: uuid }
+            status: { type: string, enum: [draft, active, archived, out_of_stock] }
+
+    ServiceInput:
+      type: object
+      required: [name, slug, price]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        category_id: { type: string, format: uuid }
+        description: { type: string }
+        price: { type: number }
+        duration_minutes: { type: integer }
+    Service:
+      allOf:
+        - $ref: '#/components/schemas/ServiceInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            store_id: { type: string, format: uuid }
+            status: { type: string }
+
+    PackageInput:
+      type: object
+      required: [name, slug, price, items]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        description: { type: string }
+        price: { type: number }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              item_type: { type: string, enum: [product, service, booking] }
+              item_id: { type: string, format: uuid }
+              quantity: { type: integer, default: 1 }
+    Package:
+      allOf:
+        - $ref: '#/components/schemas/PackageInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            store_id: { type: string, format: uuid }
+
+    SellableItem:
+      type: object
+      description: Union result type returned by /catalog/search
+      properties:
+        item_type: { type: string, enum: [product, service, booking, package] }
+        item_id: { type: string, format: uuid }
+        store_id: { type: string, format: uuid }
+        name: { type: string }
+        price: { type: number }
+        currency: { type: string }
+
+    BookingResourceInput:
+      type: object
+      required: [name, base_price]
+      properties:
+        name: { type: string }
+        description: { type: string }
+        capacity: { type: integer }
+        base_price: { type: number }
+        currency: { type: string, default: SAR }
+    BookingResource:
+      allOf:
+        - $ref: '#/components/schemas/BookingResourceInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            store_id: { type: string, format: uuid }
+            status: { type: string }
+
+    AvailabilitySlot:
+      type: object
+      properties:
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+
+    BookingHoldInput:
+      type: object
+      required: [resource_id, starts_at, ends_at]
+      properties:
+        resource_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+    Booking:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        resource_id: { type: string, format: uuid }
+        customer_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        status: { type: string, enum: [held, confirmed, cancelled, completed, expired] }
+        hold_expires_at: { type: string, format: date-time }
+        total_price: { type: number }
+
+    EventInput:
+      type: object
+      required: [name, event_type, event_date]
+      properties:
+        name: { type: string }
+        event_type: { type: string, example: wedding }
+        event_date: { type: string, format: date }
+        city: { type: string }
+        budget_total: { type: number }
+    Event:
+      allOf:
+        - $ref: '#/components/schemas/EventInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            customer_id: { type: string, format: uuid }
+            status: { type: string, enum: [planning, confirmed, completed, cancelled] }
+
+    EventDashboard:
+      type: object
+      description: Aggregated read model for the customer Event Dashboard (blueprint §21)
+      properties:
+        event: { $ref: '#/components/schemas/Event' }
+        days_remaining: { type: integer }
+        tasks: { type: array, items: { $ref: '#/components/schemas/EventTask' } }
+        budget_items: { type: array, items: { $ref: '#/components/schemas/EventBudgetItem' } }
+        bookings: { type: array, items: { $ref: '#/components/schemas/Booking' } }
+        orders: { type: array, items: { $ref: '#/components/schemas/Order' } }
+        recommended_services: { type: array, items: { $ref: '#/components/schemas/SellableItem' } }
+
+    EventTaskInput:
+      type: object
+      required: [title]
+      properties:
+        title: { type: string }
+        category: { type: string }
+        due_date: { type: string, format: date }
+    EventTask:
+      allOf:
+        - $ref: '#/components/schemas/EventTaskInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [pending, in_progress, done, skipped] }
+
+    EventBudgetItemInput:
+      type: object
+      required: [category, planned_amount]
+      properties:
+        category: { type: string }
+        planned_amount: { type: number }
+    EventBudgetItem:
+      allOf:
+        - $ref: '#/components/schemas/EventBudgetItemInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            actual_amount: { type: number }
+            status: { type: string, enum: [planned, reserved, paid] }
+
+    CartItemInput:
+      type: object
+      required: [item_type, item_id, quantity]
+      properties:
+        item_type: { type: string, enum: [product, service, package] }
+        item_id: { type: string, format: uuid }
+        variant_id: { type: string, format: uuid }
+        booking_id: { type: string, format: uuid }
+        quantity: { type: integer, default: 1 }
+    Cart:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        store_id: { type: string, format: uuid }
+        status: { type: string, enum: [active, converted, abandoned] }
+        items:
+          type: array
+          items:
+            allOf:
+              - $ref: '#/components/schemas/CartItemInput'
+              - type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  unit_price: { type: number }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        order_number: { type: string }
+        store_id: { type: string, format: uuid }
+        event_id: { type: string, format: uuid }
+        status:
+          type: string
+          enum: [pending_payment, paid, processing, ready, shipped, delivered, completed, cancelled, refunded]
+        subtotal: { type: number }
+        tax_amount: { type: number }
+        shipping_fee: { type: number }
+        total_amount: { type: number }
+        currency: { type: string }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              item_type: { type: string }
+              item_id: { type: string, format: uuid }
+              name_snapshot: { type: string }
+              quantity: { type: integer }
+              unit_price: { type: number }
+              total_price: { type: number }
+
+    PaymentInput:
+      type: object
+      required: [target_type, target_id, provider, amount, idempotency_key]
+      properties:
+        target_type: { type: string, enum: [order, booking] }
+        target_id: { type: string, format: uuid }
+        provider: { type: string, example: moyasar }
+        amount: { type: number }
+        currency: { type: string, default: SAR }
+        idempotency_key: { type: string }
+    Payment:
+      allOf:
+        - $ref: '#/components/schemas/PaymentInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            status: { type: string, enum: [pending, authorized, succeeded, failed, refunded, partially_refunded] }
+            provider_payment_id: { type: string }
+            checkout_url:
+              type: string
+              description: Redirect URL to hand off to the provider's hosted checkout
+
+    Refund:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        payment_id: { type: string, format: uuid }
+        amount: { type: number }
+        reason: { type: string }
+        status: { type: string, enum: [pending, succeeded, failed] }
+
+    Shipment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        provider: { type: string }
+        tracking_number: { type: string }
+        status:
+          type: string
+          enum: [pending, label_created, picked_up, in_transit, out_for_delivery, delivered, failed, cancelled]
+        events:
+          type: array
+          items:
+            type: object
+            properties:
+              status: { type: string }
+              description: { type: string }
+              occurred_at: { type: string, format: date-time }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        channel: { type: string, enum: [push, sms, email, in_app] }
+        event_key: { type: string }
+        payload: { type: object }
+        status: { type: string, enum: [queued, sent, failed, read] }
+        created_at: { type: string, format: date-time }
+
+    ReviewInput:
+      type: object
+      required: [rating]
+      properties:
+        item_type: { type: string, enum: [product, service, booking, package] }
+        item_id: { type: string, format: uuid }
+        order_id: { type: string, format: uuid }
+        rating: { type: integer, minimum: 1, maximum: 5 }
+        comment: { type: string }
+    Review:
+      allOf:
+        - $ref: '#/components/schemas/ReviewInput'
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            customer_id: { type: string, format: uuid }
+            created_at: { type: string, format: date-time }
+
+    AuditLog:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        actor_id: { type: string, format: uuid }
+        action: { type: string }
+        entity_type: { type: string }
+        entity_id: { type: string, format: uuid }
+        before_state: { type: object }
+        after_state: { type: object }
+        created_at: { type: string, format: date-time }
