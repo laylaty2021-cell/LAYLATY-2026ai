@@ -132,6 +132,7 @@ export class CatalogService {
       this.prisma.product.findMany({
         where: {
           status: 'active',
+          storeId: dto.storeId,
           categoryId: dto.categoryId,
           basePrice: priceFilter,
           store: dto.city ? { city: dto.city } : undefined,
@@ -142,6 +143,7 @@ export class CatalogService {
       this.prisma.service.findMany({
         where: {
           status: 'active',
+          storeId: dto.storeId,
           categoryId: dto.categoryId,
           price: priceFilter,
           store: dto.city ? { city: dto.city } : undefined,
@@ -152,6 +154,7 @@ export class CatalogService {
       this.prisma.package.findMany({
         where: {
           status: 'active',
+          storeId: dto.storeId,
           price: priceFilter,
           store: dto.city ? { city: dto.city } : undefined,
           name: dto.q ? { contains: dto.q, mode: 'insensitive' } : undefined,

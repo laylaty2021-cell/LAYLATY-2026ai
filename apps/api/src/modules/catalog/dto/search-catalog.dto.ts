@@ -7,6 +7,10 @@ export class SearchCatalogDto {
 
   @IsOptional()
   @IsUUID()
+  storeId?: string;
+
+  @IsOptional()
+  @IsUUID()
   categoryId?: string;
 
   @IsOptional()

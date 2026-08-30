@@ -439,6 +439,10 @@ paths:
         - name: q
           in: query
           schema: { type: string }
+        - name: store_id
+          in: query
+          description: Filter to one store's catalog (e.g. a store profile screen)
+          schema: { type: string, format: uuid }
         - name: category_id
           in: query
           schema: { type: string, format: uuid }

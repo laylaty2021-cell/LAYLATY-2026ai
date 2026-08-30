@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../auth/presentation/auth_controller.dart';
+import '../../stores/presentation/stores_list_screen.dart';
 import '../domain/event_models.dart';
 import 'create_event_screen.dart';
 import 'event_dashboard_screen.dart';
@@ -20,6 +21,13 @@ class EventsListScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Laylaty'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.storefront_outlined),
+            tooltip: 'Browse stores',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const StoresListScreen()),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.logout),
             onPressed: () => ref.read(authControllerProvider.notifier).logout(),
