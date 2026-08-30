@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../cart/presentation/cart_controller.dart';
+import '../../cart/presentation/cart_screen.dart';
 import '../../catalog/presentation/catalog_controller.dart';
 import 'stores_controller.dart';
 
@@ -11,12 +13,50 @@ class StoreDetailScreen extends ConsumerWidget {
 
   final String slug;
 
+  Future<void> _addToCart(
+    BuildContext context,
+    WidgetRef ref,
+    String storeId,
+    String itemType,
+    String itemId,
+  ) async {
+    try {
+      await ref
+          .read(cartApiProvider)
+          .addItem(storeId: storeId, itemType: itemType, itemId: itemId);
+      ref.invalidate(cartProvider(storeId));
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Added to cart')));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final storeAsync = ref.watch(storeBySlugProvider(slug));
 
     return Scaffold(
-      appBar: AppBar(title: Text(storeAsync.valueOrNull?.name ?? 'Store')),
+      appBar: AppBar(
+        title: Text(storeAsync.valueOrNull?.name ?? 'Store'),
+        actions: [
+          if (storeAsync.valueOrNull != null)
+            IconButton(
+              icon: const Icon(Icons.shopping_cart_outlined),
+              tooltip: 'Cart',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) =>
+                      CartScreen(storeId: storeAsync.value!.id),
+                ),
+              ),
+            ),
+        ],
+      ),
       body: storeAsync.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (error, _) => Center(child: Text('Failed to load: $error')),
@@ -58,8 +98,24 @@ class StoreDetailScreen extends ConsumerWidget {
                             child: ListTile(
                               title: Text(item.name),
                               subtitle: Text(item.itemType),
-                              trailing: Text(
-                                '${item.price.toStringAsFixed(0)} ${item.currency}',
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    '${item.price.toStringAsFixed(0)} ${item.currency}',
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.add_shopping_cart),
+                                    tooltip: 'Add to cart',
+                                    onPressed: () => _addToCart(
+                                      context,
+                                      ref,
+                                      store.id,
+                                      item.itemType,
+                                      item.itemId,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),

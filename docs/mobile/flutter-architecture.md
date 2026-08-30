@@ -7,10 +7,11 @@ blueprint §22).
 
 **Implementation status:** this document describes the target structure.
 [`../../apps/customer`](../../apps/customer) implements `auth`, `events`,
-`stores`, and `catalog` for real against the structure below (verified with
-`flutter analyze` and `flutter test`); every other feature listed here is
-scaffolded as an empty directory with a `NOTE.md` pointing back to this doc
-and its sprint.
+`stores`, `catalog`, `cart`, and `orders` for real against the structure
+below (verified with `flutter analyze` and `flutter test`) — the full
+browse-a-store → add-to-cart → checkout → view-order loop works end to end;
+every other feature listed here is scaffolded as an empty directory with a
+`NOTE.md` pointing back to this doc and its sprint.
 
 ## Project structure (Feature-Based Architecture, blueprint §22)
 
